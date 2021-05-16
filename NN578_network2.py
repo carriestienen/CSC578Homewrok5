@@ -59,6 +59,20 @@ class CrossEntropyCost(object):
         return np.divide((a-y), (a*(1-a)), out=np.zeros_like(a), where=((a*(1-a))!=0))
 
 
+class LogLikelihood(object):
+    
+    @staticmethod
+    def fn(a, y):
+        
+        return -np.log(a[np.argmax(y)])[0]
+    
+    @staticmethod
+    def derivative(a, y):  
+        for i in range(len(a)):
+            a[i] = y[i] * (-1/a[i])     
+        return a
+
+
 #### Definitions of the activation functions (as function classes)
 class Sigmoid(object):
     @staticmethod
@@ -98,6 +112,25 @@ class Tanh(object):
     def derivative(cls, z):
         """Derivative of the tanh function."""
         return 1-(cls.fn(z))**2
+
+class ReLU(object):
+    
+    @staticmethod
+    def fn(z):
+        relu = np.zeros(z.shape)
+        for i in range(len(z)):
+            relu[i] = np.maximum(relu[i], 0) 
+        return relu
+    
+    @classmethod
+    def derivative(cls, z):
+        drelu = cls.fn(z)
+        for i in range(len(z)):
+            if i > 0:
+                drelu[i] = 1
+            else:
+                drelu[i] = 0
+        return drelu
 
 
 #### Main Network class
@@ -152,7 +185,7 @@ class Network(object):
             if self.cost != QuadraticCost:
                 self.act_output = Sigmoid
 
-        if self.dropoutpercent != 0.0:
+        if dropoutpercent != 0.0:
             self.dropout = True
             self.dropoutlayers = []
         else: 
@@ -332,7 +365,7 @@ class Network(object):
         nabla_w = [np.zeros(w.shape) for w in self.weights]
 
         ### Create dropout layers
-       if (self.dropout):
+        if (self.dropout):
             for h in self.sizes[:-1]:
                 d = np.random.binomial(1, self.dropoutpercent, size=(h,1)) / self.dropoutpercent
                 self.dropoutlayers.append(d)
