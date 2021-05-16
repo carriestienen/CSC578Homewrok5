@@ -56,9 +56,7 @@ class CrossEntropyCost(object):
     @staticmethod
     def derivative(a, y):
         """Return the first derivative of the function."""
-        ###
-        ### YOU WRITE YOUR CODE HERE
-        ###
+        return np.divide((a-y), (a*(1-a)), out=np.zeros_like(a), where=((a*(1-a))!=0))
 
 
 #### Definitions of the activation functions (as function classes)
@@ -79,9 +77,7 @@ class Softmax(object):
     # Parameter z is an array of shape (len(z), 1).
     def fn(z):
         """The softmax of vector z."""
-        ###
-        ### YOU WRITE YOUR CODE HERE
-        ###
+        return np.divide(np.exp(z), np.sum(np.exp(z)), out=np.zeros_like(z), where=(np.sum(np.exp(z)!=0)))
 
     @classmethod
     def derivative(cls, z):
@@ -96,16 +92,12 @@ class Tanh(object):
     @staticmethod
     def fn(z):
         """The tanh function."""
-        ###
-        ### YOU WRITE YOUR CODE HERE
-        ###
+        return np.divide(np.exp(z)-np.exp(-z), (np.exp(z)+np.exp(-z)))
 
     @classmethod
     def derivative(cls, z):
         """Derivative of the tanh function."""
-        ###
-        ### YOU WRITE YOUR CODE HERE
-        ###
+        return 1-(cls.fn(z))**2
 
 
 #### Main Network class
@@ -138,7 +130,7 @@ class Network(object):
             cost, act_hidden, act_output, regularization, lmbda, dropoutpercent
         )
 
-    ## 578: THIS NEEDS TO CHANGE
+
     ## 578: convenience function for setting network hyperparameters
     def set_parameters(
         self,
@@ -155,6 +147,17 @@ class Network(object):
             self.act_output = self.act_hidden
         else:
             self.act_output = act_output
+
+        if self.act_output == Tanh:
+            if self.cost != QuadraticCost:
+                self.act_output = Sigmoid
+
+        if self.dropoutpercent != 0.0:
+            self.dropout = True
+            self.dropoutlayers = []
+        else: 
+            self.dropout = False
+
         self.regularization = regularization
         self.lmbda = lmbda
         self.dropoutpercent = dropoutpercent
@@ -199,17 +202,18 @@ class Network(object):
             np.random.randn(y, x) for x, y in zip(self.sizes[:-1], self.sizes[1:])
         ]
 
-    ## CHANGES NEEDED
     def feedforward(self, a):
         """Return the output of the network if ``a`` is input."""
+        idx = 0
         for b, w in zip(self.biases, self.weights):
-            ## THIS NEEDS (FURTHER) CHANGE.
-            ##  The original code (commented) doesn't work any more.
-            ##  The new scheme is written which utilizes a function class.
-            ##  But this is still incorrect because the activation of
-            ##  the output layer has is not considered (which needs to be).
-            # a = sigmoid(np.dot(w, a)+b)
-            a = (self.act_hidden).fn(np.dot(w, a) + b)
+            if idx < len(self.biases)-1:
+                a = (self.act_hidden).fn(np.dot(w, a)+b)
+                # apply dropout layer to hidden activation layer(s)
+                if (self.dropout):
+                    a *= self.dropoutlayers[idx-2]
+                idx += 1
+            else: 
+                a = (self.act_output).fn(np.dot(w, a)+b)
         return a
 
     ## 578: additional parameter 'no_convert' to control the vectorization of the target.
@@ -326,17 +330,34 @@ class Network(object):
         """
         nabla_b = [np.zeros(b.shape) for b in self.biases]
         nabla_w = [np.zeros(w.shape) for w in self.weights]
+
+        ### Create dropout layers
+       if (self.dropout):
+            for h in self.sizes[:-1]:
+                d = np.random.binomial(1, self.dropoutpercent, size=(h,1)) / self.dropoutpercent
+                self.dropoutlayers.append(d)
+
         for x, y in mini_batch:
             delta_nabla_b, delta_nabla_w = self.backprop(x, y)
             nabla_b = [nb + dnb for nb, dnb in zip(nabla_b, delta_nabla_b)]
             nabla_w = [nw + dnw for nw, dnw in zip(nabla_w, delta_nabla_w)]
-        self.weights = [
-            (1 - eta * (lmbda / n)) * w - (eta / len(mini_batch)) * nw
-            for w, nw in zip(self.weights, nabla_w)
-        ]
-        self.biases = [
-            b - (eta / len(mini_batch)) * nb for b, nb in zip(self.biases, nabla_b)
-        ]
+        
+        ###only do it this way for L2
+        if self.regularization == None or self.regularization == 'L2':
+            ###provided code
+            self.weights = [
+                (1 - eta * (lmbda / n)) * w - (eta / len(mini_batch)) * nw
+                for w, nw in zip(self.weights, nabla_w)
+            ]
+            self.biases = [
+                b - (eta / len(mini_batch)) * nb for b, nb in zip(self.biases, nabla_b)
+            ]
+        ###if not L2, assume L1
+        else: 
+            self.weights = [(w-eta*(lmbda/n))*abs(w)/w-(eta/len(mini_batch))*nw 
+                            for w, nw in zip(self.weights, nabla_w)]            
+            self.biases = [b-(eta/len(mini_batch))*nb
+                       for b, nb in zip(self.biases, nabla_b)]
 
     ## CHANGES NEEDED.
     def backprop(self, x, y):
